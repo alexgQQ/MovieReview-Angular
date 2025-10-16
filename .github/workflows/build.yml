@@ -1,0 +1,30 @@
+name: Test Workflow
+
+on: workflow_dispatch
+
+jobs:
+  build-and-push:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Restore NuGet packages
+      run: nuget restore MovieReview.Web.sln
+
+    - name: Build ASP.NET MVC 5 application
+      run: msbuild MovieReview.Web.sln /p:Configuration=Release /p:DeployOnBuild=true /p:PublishProfile=LocalPublishProfile /p:WebPublishMethod=FileSystem /p:DeleteExistingFiles=True /p:publishUrl=publish
+
+    - name: Build and push image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: alexgqq/movie-review-app:latest
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
