@@ -1,33 +1,53 @@
-name: Test Workflow
+name: Build and Push
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+      branch:
+        description: 'Branch to build from'
+        required: true
+        default: 'main'
+        type: string
+  push:
+    branches:
+      - main
+    paths-ignore::
+      - '.github/**'
+      - 'README.md'
+      - '.gitignore'
+      - '.dockerignore'
+
 
 jobs:
   build-and-push:
     runs-on: windows-latest
 
     steps:
-    - name: Checkout code
+    - name: Checkout Code
       uses: actions/checkout@v4
+
+    - name: Get Commit SHA
+    - id: get_short_sha
+      run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
-    - name: Restore NuGet packages
+    - name: Restore NuGet Packages
       run: nuget restore MovieReview.Web.sln
 
-    - name: Build ASP.NET MVC 5 application
+    - name: Build Application
       run: msbuild MovieReview.Web.sln /p:Configuration=Release /p:DeployOnBuild=true /p:PublishProfile=LocalPublishProfile /p:WebPublishMethod=FileSystem /p:DeleteExistingFiles=True /p:publishUrl=publish
 
-    - name: Run Tests
-      run: '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\TestWindow\vstest.console.exe" MovieReview.Web\bin\MovieReview.Test.dll'
+    # TODO: These don't seem to run as expected
+    # the setup msbuild action does not add vstest to path so call it directly 
+    # - name: Run Tests
+    #   run: '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\TestWindow\vstest.console.exe" MovieReview.Web\bin\MovieReview.Test.dll'
 
-    # TODO: skip for now
-    # - name: Login to Docker Hub
-    #   uses: docker/login-action@v3
-    #   with:
-    #     username: ${{ secrets.DOCKERHUB_USERNAME }}
-    #     password: ${{ secrets.DOCKERHUB_TOKEN }}
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
 
     # Buildkit allows the windows platform but it's support is experimental and
     # moby/buildkit doesn;t actually provide images for that arch
@@ -43,9 +63,10 @@ jobs:
     #     push: true
     #     tags: alexgqq/movie-review-app:latest
 
-    # TODO: skip for now
-    # - name: Build and Push
-    #   shell: powershell
-    #   run: |
-    #     docker build . -t ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app:latest
-    #     docker push ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app:latest
+    - name: Build Image and Push
+      shell: powershell
+      run: |
+        docker build . \
+          -t ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app:${{ steps.get_short_sha.outputs.short_sha }} \
+          -t ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app:latest
+        docker push --all-tags ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app
