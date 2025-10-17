@@ -19,11 +19,15 @@ jobs:
     - name: Build ASP.NET MVC 5 application
       run: msbuild MovieReview.Web.sln /p:Configuration=Release /p:DeployOnBuild=true /p:PublishProfile=LocalPublishProfile /p:WebPublishMethod=FileSystem /p:DeleteExistingFiles=True /p:publishUrl=publish
 
-    - name: Login to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    - name: Run Tests
+      run: '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\TestWindow\vstest.console.exe" MovieReview.Web\bin\MovieReview.Test.dll'
+
+    # TODO: skip for now
+    # - name: Login to Docker Hub
+    #   uses: docker/login-action@v3
+    #   with:
+    #     username: ${{ secrets.DOCKERHUB_USERNAME }}
+    #     password: ${{ secrets.DOCKERHUB_TOKEN }}
 
     # Buildkit allows the windows platform but it's support is experimental and
     # moby/buildkit doesn;t actually provide images for that arch
@@ -39,8 +43,9 @@ jobs:
     #     push: true
     #     tags: alexgqq/movie-review-app:latest
 
-    - name: Build and Push
-      shell: powershell
-      run: |
-        docker build . -t ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app:latest
-        docker push ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app:latest
+    # TODO: skip for now
+    # - name: Build and Push
+    #   shell: powershell
+    #   run: |
+    #     docker build . -t ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app:latest
+    #     docker push ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app:latest
