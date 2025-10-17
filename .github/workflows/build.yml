@@ -2,6 +2,7 @@ name: Build and Push
 
 on:
   workflow_dispatch:
+    inputs:
       branch:
         description: 'Branch to build from'
         required: true
@@ -10,7 +11,7 @@ on:
   push:
     branches:
       - main
-    paths-ignore::
+    paths-ignore:
       - '.github/**'
       - 'README.md'
       - '.gitignore'
@@ -26,8 +27,8 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Get Commit SHA
-    - id: get_short_sha
-      run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      id: short_sha
+      uses: benjlevesque/short-sha@v3.0
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
@@ -66,7 +67,7 @@ jobs:
     - name: Build Image and Push
       shell: powershell
       run: |
-        docker build . \
-          -t ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app:${{ steps.get_short_sha.outputs.short_sha }} \
+        docker build . `
+          -t ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app:${{ steps.short_sha.outputs.sha }} `
           -t ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app:latest
         docker push --all-tags ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app
