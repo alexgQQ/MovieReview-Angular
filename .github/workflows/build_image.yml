@@ -1,0 +1,92 @@
+name: Build Image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '.github/**'
+      - 'README.md'
+      - '.gitignore'
+      - '.dockerignore'
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-push:
+    # The image build requires a windows based runner
+    # Tooling info on the github hosted runners https://github.com/actions/runner-images
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout Latest
+      if: github.ref_type == 'branch'
+      uses: actions/checkout@v4
+
+    - name: Checkout Tag
+      if: github.ref_type == 'tag'
+      uses: actions/checkout@v4
+      with: 
+        ref: ${{ github.ref_name }}
+
+    - name: Get Commit Short SHA
+      id: short_sha
+      uses: benjlevesque/short-sha@v3.0
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    # TODO: Package installation flags vulnerable deps and should fail the pipeline
+    # but these are being skipped for now but can be enabled with the app config 
+    # WarningsAsErrors property group
+    - name: Restore NuGet Packages
+      shell: powershell
+      run: nuget restore MovieReview.Web.sln
+
+    - name: Build Application
+      shell: powershell
+      run: msbuild MovieReview.Web.sln /p:Configuration=Release `
+                                      /p:DeployOnBuild=true `
+                                      /p:PublishProfile=LocalPublishProfile `
+                                      /p:WebPublishMethod=FileSystem `
+                                      /p:DeleteExistingFiles=True `
+                                      /p:publishUrl=publish
+
+    # TODO: Tests should be running in the pipeline but these do not work as expected
+    # the setup msbuild action does not add vstest to path so call it directly
+    # - name: Run Tests
+    #   run: '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\TestWindow\vstest.console.exe" MovieReview.Web\bin\MovieReview.Test.dll'
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    # The build process could be improved using Buildkit 
+    # However moby/buildkit doesn't actually provide images for windows arch
+    # It's support for windows is experimental and require your own specific runners
+    # https://docs.docker.com/build/buildkit/#buildkit-on-windows
+
+    - name: Build Latest Image
+      if: github.ref_type == 'branch'
+      shell: powershell
+      run: |
+        docker build --no-cache --build-arg COMMIT_SHA=${{ steps.short_sha.outputs.sha }} . `
+          -t ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app:${{ steps.short_sha.outputs.sha }} `
+          -t ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app:latest
+        docker push --all-tags ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app
+
+    - name: Build Tag Image
+      if: github.ref_type == 'tag'
+      shell: powershell
+      run: |
+        docker build --no-cache --build-arg COMMIT_SHA=${{ steps.short_sha.outputs.sha }} . `
+          -t ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app:${{ steps.short_sha.outputs.sha }} `
+          -t ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app:${{ github.ref_name }}
+        docker push --all-tags ${{ secrets.DOCKERHUB_USERNAME }}/movie-review-app
+
+    - name: Create Release
+      if: github.ref_type == 'tag'
+      uses: softprops/action-gh-release@v2
